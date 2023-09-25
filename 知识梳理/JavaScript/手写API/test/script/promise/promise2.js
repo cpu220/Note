@@ -1,0 +1,277 @@
+const PENDING = 'pending'
+const FULFILLED = 'fulfilled'
+const REJECT = 'reject'
+
+
+class MyPromise {
+    #state = PENDING
+    #result = undefined
+    #handler = []
+
+    constructor(fn) {
+        const resolve = (data) => {
+            // 如果状态被改变，则直接返回，说明结束
+            console.log('resolve:', data)
+
+            this.#changeState(FULFILLED, data)
+        }
+        const reject = (error) => {
+            console.log('reject:', error)
+            this.#changeState(REJECT, error)
+        }
+
+        try {
+            fn(resolve, reject)
+        } catch (error) {
+            reject(error)
+        }
+
+    }
+    // 以下是内部方法 
+    #changeState(state, result) {
+        if (this.#state !== PENDING) {
+            return
+        }
+
+        this.#state = state
+        this.#result = result
+        console.log('changeState:', this.#state, this.#result)
+        this.#run()
+
+    }
+
+    // 微队列
+    #funMicroTask(func) {
+        // node环境的微队列
+        if (typeof process === 'object' && typeof process.nextTick === 'function') {
+            console.log('进入node事件循环')
+            process.nextTick(func)
+        } else if (typeof MutationObServer === 'function') {
+            // 浏览器环境的微队列
+            console.log('进入浏览器事件循环')
+
+            const obj = new MutationObServer(func)
+            const textNode = document.createTextNode('1');
+            obj.objserver(textNode, {
+                characterData: true
+            });
+            textNode.data = '2'
+        } else {
+            // 微队列是环境，不是语言，所以除去浏览器和node环境，需要具体看
+            console.log('进入setTimeout')
+            setTimeout(func, 0)
+        }
+
+    }
+
+    // 统一回调封装
+    #runCallBack(fn, resolve, reject) {
+        console.log('runCallBack:', fn, this.#state)
+        this.#funMicroTask(() => {
+
+            if (typeof fn === 'function') {
+                // 1.回调是函数
+
+                try {
+                    const res = fn(this.#result)
+                    //  返回的对象是否为promise
+                    if (this.#isPromiseLike(res)) {
+                        console.log('回调是promise', res)
+                        res.then(resolve, reject)
+                    } else {
+                        console.log('回调不是promise', res)
+
+                        resolve(res)
+                    }
+
+                } catch (error) {
+                    reject(error)
+                }
+            } else {
+                // 2.回调不是函数，则根据状态，调用内置的函数返回
+
+                const callback = this.#state === FULFILLED ? resolve : reject;
+                callback(this.#result)
+                return
+            }
+
+
+
+
+        })
+
+    }
+
+    // 判断是否为Promise对象
+    #isPromiseLike(obj) {
+        console.log('isPromiseLike:', obj)
+        if (obj !== null &&
+            (typeof (obj) === 'object' || typeof (obj) === 'function')
+        ) {
+            return typeof obj.then === 'function'
+        }
+        return false;
+    }
+
+    // 回调
+    #run() {
+        if (this.#state === PENDING) { return }
+        while (this.#handler.length) {
+            const { onFulfilled, onRejected, resolve, reject } = this.#handler.shift()
+            if (this.#state === FULFILLED) {
+                // 当前状态是完成
+                this.#runCallBack(onFulfilled, resolve, reject)
+            } else {
+                // 当前状态是失败 
+                this.#runCallBack(onRejected, resolve, reject)
+
+            }
+
+        }
+    }
+
+    // 以下是对外api
+    then(onFulfilled, onRejected) {
+        return new MyPromise((resolve, reject) => {
+
+            this.#handler.push({
+                onFulfilled,
+                onRejected,
+                resolve,
+                reject,
+            })
+
+            this.#run();
+
+
+        })
+    }
+
+    // catch、finally、static resolve、static reject 是es6规范，不是promiseA+规范
+
+    catch(onRejected) {
+        return this.then(undefined, onRejected)
+    }
+
+    // https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Promise/finally
+    // 文档说， onFinally 回调不解释欧任何参数，所以不需要提供。
+    finally(onFinally) {
+        return this.then(
+            (data) => {
+                onFinally()
+                return data;
+            },
+            (err) => {
+                onFinally()
+                // throw new Error(err)
+                throw err
+            }
+        )
+    }
+
+    static resolve(value) {
+        // 1. 将给定的值转换为一个 promise，如果该值本身就是一个Promise，那么该Promise将被返回
+        if (value instanceof MyPromise) {
+            return value
+        }
+        // 2. 如果该值是一个thenable对象，将调用then方法及其两个回调函数，否则，返回的Promise将会以该值兑现。
+        let _resolve, _reject;
+        const p = new MyPromise((resolve, reject) => {
+            _resolve = resolve;
+            _reject = reject;
+        }) 
+        if (p.#isPromiseLike(value)) {
+            value.then(_resolve, _reject)
+        } else {
+            _resolve(value)
+        }
+        return p;
+    }
+
+    // 返回一个已拒绝的rejected的Promise对象，拒绝原因为给定的参数
+    static reject(value){
+        return new MyPromise((undefined,reject)=>{
+            reject(value)
+        })
+    }
+
+    /**
+     * 返回的Promise 与第一个有结果的一致
+     * @param {Iterator} proms 
+     */
+    static race(proms){
+        return new MyPromise((resolve,reject)=>{
+            for(const item of proms){
+                MyPromise.resolve(item).then(resolve,reject)
+            }
+        })
+    }
+
+
+}
+
+
+// 测试1  catch
+// const p = new MyPromise((resolve, reject) => {
+//     setTimeout(()=>{
+//         reject(2)
+//     })
+// }) 
+
+// p.catch((res)=>{
+//     console.log('catch',res)
+// })
+
+// 测试2 finally
+// const p = new MyPromise((resolve, reject) => {
+//     setTimeout(()=>{
+//         reject(233333)
+//     })
+// }) 
+
+// p.finally(()=>{
+//     console.log('finally')
+// })
+
+// 测试3 resolve
+// const p1 = new Promise((resolve) => {
+//     resolve(333)
+// })
+
+// // console.log(MyPromise.resolve(p1) === p1)
+// MyPromise.resolve(p1).then((data)=>{
+//     console.log('resolve:=>',data)
+// })
+
+// 测试4 reject
+// const p1 = new Promise((resolve) => {
+//     resolve(444)
+// })
+
+// MyPromise.reject(321321).then((data)=>{
+//     console.log('reject:=>',data)
+// })
+
+//  测试5 race
+const pro1 = new MyPromise((resolve,reject)=>{
+    setTimeout(()=>{
+        reject(1)
+    },1000)
+})
+
+const pro2 = new MyPromise((resolve,reject)=>{
+    setTimeout(()=>{
+        resolve(2)
+    },500)
+})
+
+const pro = MyPromise.race([pro1,pro2,5]);
+
+pro.then(
+    (result)=>{
+        console.log('then==>', result)
+    },
+    (reason)=>{
+        console.log('reson==>',reason)
+    }
+)

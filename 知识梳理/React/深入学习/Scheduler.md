@@ -261,7 +261,7 @@ const performWorkUntilDeadline = () => {
 ```
 
 ### 总结
-- performWorkUntilDeadline 主要还是根据条件，调用flushWork，并返回一个Boole，来判断是否还有任务需要做，如果有，就继续调用schedulePerformWorkUntilDeadline，否则，就将 isMessageLoopRunning 这个表示 是否有人物正在调度 的状态改为 false
+- performWorkUntilDeadline 主要还是根据条件，调用flushWork，并返回一个Boole，来判断是否还有任务需要做，如果有，就继续调用schedulePerformWorkUntilDeadline，否则，就将 isMessageLoopRunning 这个表示 是否有任务正在调度 的状态改为 false
 
 
 

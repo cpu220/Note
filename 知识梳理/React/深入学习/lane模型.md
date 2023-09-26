@@ -2,7 +2,7 @@
 > react 为什么要从之前的 expirationTime 模型，改为 lane 模型？
 
 ## React 和 Scheduler 优先级的介绍
-由于react团队打算把 Scheduler独立发布，没所以在react内部，有一个粒度更细的优先级算法，这个就是lane模型。
+由于react团队打算把 Scheduler独立发布，所以在react内部，有一个粒度更细的优先级算法，这个就是lane模型。
 
 在Scheduler内部，有5种优先级
 
@@ -149,12 +149,12 @@ const isUpdateInCludedInbatch = priorityOfUpdate >= priorityOfBatch
 
 
 # lane 模型
-因此，基于伤处的原因，React中引入了lane模型。不管新引入什么模型，比如要保证一下两个问题得到解决：
+因此，基于上述的原因，React中引入了lane模型。不管新引入什么模型，比如要保证一下两个问题得到解决：
 
 ## 以优先级为依赖，对update进行一个排序
  
 
-针对第一个问题，lane模型中，设置了很多的lane妹妹一个lane实际上是一个二进制来表达优先级，越低的位代表越高的优先级，例如：
+针对第一个问题，lane模型中，设置了很多的lane，一个lane实际上是一个二进制来表达优先级，越低的位代表越高的优先级，例如：
 
 ```js
 

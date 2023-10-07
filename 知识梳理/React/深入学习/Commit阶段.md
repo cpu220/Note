@@ -27,10 +27,17 @@
 ### commitXXXEffects
 
 这个函数，是每个子阶段的入口函数， finishedWork 会作为firstChild 参数传入进去
+root是React应用的根节点，finishedWork 是root的一个属性，表示当前完成更新的FiberTree
 
 ```jsx
+// packages/react-reconciler/src/ReactFiberWorkLoop.js
 
-function commitXXXEffects(Root，firstChild){
+const shouldFireAfterActiveInstanceBlur = commitBeforeMutationEffects(
+      root,
+      finishedWork,
+    );
+// packages/react-reconciler/src/ReactFiberCommitWork.new.js
+function commitXXXEffects(Root, firstChild){
     // 省略标记全局变量
     nextEffect = firstChild;
     // 省略重置全局变量
@@ -41,10 +48,11 @@ function commitXXXEffects(Root，firstChild){
 ```
 
 ### commitXXXEffects_begin
-向下遍历FiberNode，遍历的时候会遍历知道第一个满足如下条件之一的 FiberNode
+向下遍历FiberNode，遍历的时候会遍历直到第一个满足如下条件之一的 FiberNode
 1. 当前的FiberNode的子FiberNode不包含该子阶段对应的flags
 2. 当前的FiberNode不存在子FiberNode
-3. 对目标FiberNode 执行 commitXXXEffects_complete方法，
+
+然后对目标FiberNode 执行 commitXXXEffects_complete方法，
 
 ```jsx
 function commitXXXEffects_begin(){
@@ -94,7 +102,7 @@ function commitXXXEffects_complete(root){
 
 ```
 
-> nextEffect 是 React 源码中的一个全局变量，它的作用是在 commit 阶段遍历 effectList 链表，执行对应的副作用函数1。effectList 链表是在 render 阶段收集的，它包含了所有有更新的 fiber 节点，每个节点都有一个 effectTag 属性，表示它的更新类型2。
+> nextEffect 是 React 源码中的一个全局变量，它的作用是在 commit 阶段遍历 effectList 链表，执行对应的副作用函数。effectList 链表是在 render 阶段收集的，它包含了所有有更新的 fiber 节点，每个节点都有一个 effectTag 属性，表示它的更新类型2。
 
 > 每个子阶段都会以DFS （深度遍历）的原则进行遍历，最终会在commitXXXEffectsOnFiber中针对不同的flags做出不同的处理
 
@@ -150,8 +158,8 @@ function commitBeforeMutationEffectsOnFiber(finishedWork){
 ```
 
 上面的代码，主要是处理两种类型的FiberNode
-1. ClassComponent：执行 getSnapsshotBeforeUpdate 方法
-2. HostRoot：执行 clearCOntainer 方法，清空HostRoot挂载的内容，方便Mutation阶段渲染
+1. ClassComponent：执行 getSnapshotBeforeUpdate 方法
+2. HostRoot：执行 clearContainer 方法，清空HostRoot挂载的内容，方便Mutation阶段渲染
 
 
 ## Mutation 阶段
@@ -169,10 +177,10 @@ export function commitMutationEffects(
   inProgressLanes = committedLanes;
   inProgressRoot = root;
 
-  setCurrentDebugFiberInDEV(finishedWork);
+  // setCurrentDebugFiberInDEV(finishedWork);
   // 这个才是真正的工作函数
   commitMutationEffectsOnFiber(finishedWork, root, committedLanes);
-  setCurrentDebugFiberInDEV(finishedWork);
+  // setCurrentDebugFiberInDEV(finishedWork);
 
   inProgressLanes = null;
   inProgressRoot = null;
@@ -214,7 +222,7 @@ function commitMutationEffects_begin(root){
 
 ```
 
-删除DOM元素的操作，是发生在 **commitBeforeMutationEffects_begin** 方法中，首先会先拿到 deletions 数组，之后再遍历该数组，进行删除操作。
+删除DOM元素的操作，是发生在 **commitMutationEffects_begin** 方法中，首先会先拿到 deletions 数组，之后再遍历该数组，进行删除操作。
 
 > 需要注意的是，删除一个元素，不仅仅是删除节点，还要将节点上注册的事件也要注销掉等，防止内存溢出
 
@@ -387,7 +395,7 @@ root.current = finishedWork;
 
 ## Layout 阶段
 有关DOM元素的操作，在 Mutation 阶段完成 
-在这一阶段，主要的工作集中在  commitLayoutEffectsOnFiber 函数中，该函数会遍历 effectList 链表，对于不同的FiberNode，执行不同的操作。执行一些副作用函数，比如 useEffect、useLayoutEffect 的回调函数。
+在这一阶段，主要的工作集中在  commitLayoutEffectOnFiber 函数中，该函数会遍历 effectList 链表，对于不同的FiberNode，执行不同的操作。执行一些副作用函数，比如 useEffect、useLayoutEffect 的回调函数。
 
 
 - 对应 classComponent ： 该阶段会指向 componentDidMount、componentDidUpdate方法
@@ -397,11 +405,13 @@ root.current = finishedWork;
 
 # v18.2.0
 
-对于之前的 BeforeMutation 和 Mutation阶段，有写变动
+对于之前的 BeforeMutation 和 Mutation阶段，有些变动
 
 ## BeforeMutation 的改动
 
-不同于之前，对于deletions的操作是放在  **commitMutationEffects_begin** 里，新版函数改成了 **commitPassiveUnmountEffects_begin** 
+不同于之前，对于deletions的操作是放在  **commitMutationEffects_begin** 里，新版函数改成了 **recursivelyTraverseMutationEffects** 
+
+而之前放在commitBeforeMutationEffects_begin里，新版本抽象为 **commitPassiveUnmountEffects_begin**
 
 并且以 **commitPassiveUnmountEffects** 暴露给ReactFiberWorkLoop 调用
 ```jsx
@@ -410,6 +420,11 @@ export function commitPassiveUnmountEffects(firstChild: Fiber): void {
   commitPassiveUnmountEffects_begin();
 }
 
+/***
+ * 这个函数主要是在DOM变更之前，执行一些副作用函数，比如useEfect
+ *  
+ * 
+ */ 
 function commitPassiveUnmountEffects_begin() {
   while (nextEffect !== null) {
     const fiber = nextEffect;
@@ -418,6 +433,7 @@ function commitPassiveUnmountEffects_begin() {
     if ((nextEffect.flags & ChildDeletion) !== NoFlags) {
       const deletions = fiber.deletions;
       if (deletions !== null) {
+        // 遍历当前节点的 deletions，对每一个要删除的fiber节点，执行卸载处理
         for (let i = 0; i < deletions.length; i++) {
           const fiberToDelete = deletions[i];
           nextEffect = fiberToDelete;

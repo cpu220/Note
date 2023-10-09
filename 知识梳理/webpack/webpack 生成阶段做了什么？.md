@@ -7,8 +7,8 @@
 
  执行Compilation.seal 进行产物的封装
 
- 1. 构建本次编译的ChunkGraph 对象,执行 buildCHunkGraph,这里会将import(),require.ensure等方法生成的动态模块添加到chunks中
- 2. 遍历Compilation.hodules集合，将module按entry动态引入 的规则分配个你不同的Chunk对象。
+ 1. 构建本次编译的ChunkGraph 对象,执行 buildChunkGraph,这里会将import(),require.ensure等方法生成的动态模块添加到chunks中
+ 2. 遍历Compilation.modules集合，将module按entry动态引入 的规则分配给不同的Chunk对象。
  3. 调用Compilation.emitAssets方法将assets信息记录到Compilationassets中。
  4. 执行hooks.optimizeChunkModules的钩子，这里开始进行代码生成和封装。
    - 执行一系列钩子函数（reviveModules，moduleld，optimizeChunklds）

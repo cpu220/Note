@@ -1,7 +1,9 @@
 # useRef
 
+源码：react/packages/react-reconciler/src/ReactFiberHooks.new.js
+
 # useRef 各个阶段
-ref 是 reference的缩写，在React中，开发者可以通过ref保存一个对DOM的引用。
+ref 是 reference 的缩写，在React中，开发者可以通过ref保存一个对DOM的引用。
 
 在React中，出现过3种ref引用模式
 1. String类型
@@ -21,9 +23,10 @@ const refContainer = useRef(initialValue);
 
 ```ts
 function mountRef<T>(initialValue: T): {current: T} {
+    // 创建一个hook
     const hook = mountWorkInProgressHook();
     const ref = {current:initialValue};
-
+// 将 ref对象挂到hook的memoizedState上
     hook.memoizedState = ref;
     return ref;
 }
@@ -36,10 +39,11 @@ function mountRef<T>(initialValue: T): {current: T} {
 update阶段调用的是updateRef，对应代码如下：
 
 ```ts
-function updateRef<T>(initialValue){
-    const hook = updateWorkInProgressHook();
-    return hook.memoizedState;
+function updateRef<T>(initialValue: T): {|current: T|} {
+  const hook = updateWorkInProgressHook();
+  return hook.memoizedState;
 }
+
 
 
 ```
@@ -101,6 +105,18 @@ function commitMutationOnEffectOnFiber( finishedWork,root  ){
             commitDetachRef(current);
         }
     }
+}
+// v18.2.0 版本 
+function commitMutationEffects(root, renderPriorityLevel) {
+    // ...
+    if (effectTag & Ref) {
+      var current = nextEffect.alternate;
+
+      if (current !== null) {
+        commitDetachRef(current);
+      }
+    } 
+    // ...
 }
 
 ```

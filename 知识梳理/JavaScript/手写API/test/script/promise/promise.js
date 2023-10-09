@@ -150,24 +150,24 @@ class MyPromise {
 }
 
 // 测试1
-// const p = new MyPromise((resolve, reject) => {
-//     // resolve(1)
-//     // reject(2)
-//     setTimeout(() => {
-//         resolve(333)
-//     }, 0)
-// })
+const p = new MyPromise((resolve, reject) => {
+    // resolve(1)
+    // reject(2)
+    setTimeout(() => {
+        resolve(333)
+    }, 0)
+})
 
-// p.then(
-//     //    (res)=>{console.log(res)},
-//     null,
-//     (err) => {
-//         console.log(err)
-//         return 456
-//     }
-// ).then((res) => {
-//     console.log('2', res)
-// })
+p.then(
+    //    (res)=>{console.log(res)},
+    null,
+    (err) => {
+        console.log(err)
+        return 456
+    }
+).then((res) => {
+    console.log('2', res)
+})
 
 //  测试2
 // const p = new MyPromise((resolve, reject) => {

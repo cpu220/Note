@@ -75,3 +75,62 @@
     this.buildQueue.add(module, callback);
   }
 ```
+
+# 最后的打包文件结构
+
+## 打包前
+
+```js
+// index.js
+
+console.log(2)
+const a = require('./a.js')
+console.log(a)
+
+// a.js
+console.log(1) 
+module.exports = 'a'
+
+```
+
+## 打包后
+
+```js
+
+(function (modules) {
+  var installedModules = {}
+  function __webpack__require__(moduleId) {
+    //  确认缓存是否有加载到
+    if (installedModules[moduleId]) {
+      // 有则进行返回
+      return installedModules[moduleId].exports
+    }
+    //  没有则加载
+    var module = installedModules[moduleId] = {
+      i: moduleId,
+      l: false, // 有没有加载
+      exports: {}
+
+    }
+    
+    modules[moduleId].call(module.exports, module, module.exports, __webpack__require__)
+
+    module.l = true // 修改记录，模块加载完成
+    return module.exports;
+  }
+  return __webpack__require__('./src/index.js')
+})({
+  // 依赖模块
+  "./src/a.js": function (module ,exports) {
+    console.log(1)
+    module.exports = 'a'
+  },
+  // 入口文件
+  "./src/index.js": function (module,exports , __webpack__require__) {
+    console.log(2)
+    const a = __webpack__require__('./src/a.js')
+    console.log(a)
+  }
+})
+
+```

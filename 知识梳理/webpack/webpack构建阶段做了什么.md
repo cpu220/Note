@@ -134,3 +134,14 @@ module.exports = 'a'
 })
 
 ```
+
+在开发环境，为了能够方便定位，webpack对代码进行进一步的包装
+
+```js
+{
+  // 依赖模块
+  "./src/a.js": function (module ,exports) {
+    eval("console.log(1)  module.exports = 'a';  \n //# sourceURL=webpack:///./src/a.js? ")
+}
+
+```

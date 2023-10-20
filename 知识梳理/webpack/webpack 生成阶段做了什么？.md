@@ -28,3 +28,5 @@
    3. 遍历chunk集合，调用Compilation.emitAsset方法，标记chunk的输出规则，即转化为assets集合。
    4. 写入本地文件，用的是webpack函数执行时初始化的文件流工具。
    5. 执行done狗子函数，这里会执行compiler.run（）的回调，再执行compiler.close(),然后执行持久化存储，最后执行回调函数。
+
+

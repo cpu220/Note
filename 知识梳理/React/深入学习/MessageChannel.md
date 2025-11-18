@@ -1,14 +1,20 @@
 # Message Channel
 
 ## 事件循环
-事件循环的机制就是每循环一次，会从任务队列中取出一个任务来执行，如果还没有达到浏览器需要重新渲染的时间(16ms),那么久继续循环一次，从任务队列里面再取一个任务来执行，以此类推，直到浏览器需要重新渲染，这个时候就会执行重新渲染的任务，执行完毕后，回到之前的流程。
+事件循环是浏览器和Node.js处理异步操作的机制。它的工作原理是：
+1. 从宏任务队列中取出一个任务执行
+2. 执行过程中如果产生新的宏任务，会被加入到宏任务队列的末尾
+3. 执行过程中如果产生新的微任务，会被加入到微任务队列的末尾
+4. 当前任务执行完成后，立即处理微任务队列中的所有微任务
+5. 微任务处理完成后，如果需要重新渲染（通常每16ms一次），会执行重新渲染
+6. 渲染完成后，进入下一次事件循环，重复上述过程
 
-> 需要注意的是 requestAnimationFrame API是在每次重新 渲染之前执行的。这个API的出现，就是专门用来做动画的。
+> 需要注意的是 `requestAnimationFrame` API是在每次重新渲染之前执行的，专门用于创建流畅的动画效果。
 
 
 ## MessageChannel接口
 
-这其实是一个用来做消息通讯的接口，用来进行跨线程通讯，也就是说可以在不同的线程之间传递数据。
+`MessageChannel` 是一个用于消息通信的API，主要用于跨线程通信（如主线程与Web Worker之间）。它创建了两个相互关联的端口（port1和port2），通过这两个端口可以双向传递消息。
 
 ```html
 <div>
@@ -21,27 +27,33 @@
 
 ```
 
-```jsx
+```javascript
+// 获取DOM元素
+const btn1 = document.getElementById('btn1');
+const btn2 = document.getElementById('btn2');
+const content = document.getElementById('content');
+
 const channel = new MessageChannel();
-// 两个信息端口，这两个信息端口可以进行信息的通信
+// 两个相互关联的信息端口
 const port1 = channel.port1;
 const port2 = channel.port2;
+
 btn1.onclick = function(){
-  // 给 port1 发消息
-  // 那么这个信息就应该由 port2 来进行发送
+  // 通过 port2 给 port1 发消息
   port2.postMessage(content.value);
 }
-// port1 需要监听发送给自己的消息
+
+// port1 监听来自 port2 的消息
 port1.onmessage = function(event){
   console.log(`port1 收到了来自 port2 的消息：${event.data}`);
 }
 
 btn2.onclick = function(){
-  // 给 port2 发消息
-  // 那么这个信息就应该由 port1 来进行发送
+  // 通过 port1 给 port2 发消息
   port1.postMessage(content.value);
 }
-// port2 需要监听发送给自己的消息
+
+// port2 监听来自 port1 的消息
 port2.onmessage = function(event){
   console.log(`port2 收到了来自 port1 的消息：${event.data}`);
 }
@@ -49,39 +61,43 @@ port2.onmessage = function(event){
 ```
 
 ## Scheduler
-任务调度需要满足两个条件：
-1. JS暂停，将主线程还给浏览器，让浏览器能够有序的重新渲染页面
-2. 暂停了的JS（也就是还有任务没有执行完），需要再下一次接着来执行
-   1. 浏览器内部有机制来估计每一帧的剩余时间，从而来决定是否调用 requestIdleCallback，如果callback执行时间过长，那么就会获取option里的timeout，强制执行callback。如果没有timeout，那么浏览器会等待下一个空暇你时间来执行callback，将当前js暂停。
+在React中，Scheduler（调度器）用于管理任务的执行顺序和时机，以确保应用的流畅性。任务调度需要满足两个核心条件：
+1. 能够暂停当前JS执行，将主线程还给浏览器进行重新渲染
+2. 暂停的任务能够在浏览器渲染完成后继续执行
 
-根据上面的描述，就是利用事件循环，将没有执行完的js放入到任务队列，下一次事件循环的时候再取出执行。所以就需要产生一个任务（宏任务）
+为了实现这个目标，需要产生一个宏任务并将其加入任务队列，等待下一次事件循环时执行。
 
-> 为什么不适用setTimeOut？
-> 因为setTimeOut 在嵌套超过5层，timeout如果小于4ms，会强制为4ms
-> 本来一帧就只有16ms， 这就少了1/4
+### 为什么不使用setTimeout？
+- `setTimeout` 存在最小延迟限制：当嵌套超过5层且timeout小于4ms时，会被强制设置为4ms
+- 这会导致任务执行延迟，影响应用的响应性
 
-```
-let count = 0; // 计数器
-let startTime = new Date(); // 获取当前的时间戳
+```javascript
+let count = 0;
+let startTime = new Date();
 console.log("start time:", 0, 0);
+
 function fn(){
   setTimeout(function(){
     console.log("exec time:", ++count, new Date() - startTime);
-    if(count === 50){
-      return;
-    }
+    if(count === 50) return;
     fn();
-  },0)
+  }, 0);
 }
-fn();
 
+fn();
 ```
 
+### 为什么不选择requestAnimationFrame？
+- `requestAnimationFrame` 只能在重新渲染之前执行一次，无法在同一帧内执行多个任务
+- 兼容性不如MessageChannel广泛
 
-> 为什么不选择 requestAnimationFrame？
-> 1. 因为这个只能在重新渲染之前，才能够执行一次。如果把它包装成一个任务，放到任务队列中。只要没到重新渲染的时间，就可以一直从任务队列里面获取任务执行。
-> 2. 兼容问题
+### 为什么不选择微任务？
+- 微任务会在当前执行栈清空后立即执行，直到整个微任务队列被清空
+- 这会导致长时间占据主线程，延迟浏览器的重新渲染
 
+### 为什么选择MessageChannel？
+- `MessageChannel` 可以创建两个通信端口，通过端口发送消息会产生一个宏任务
+- 这个宏任务的执行时机比`setTimeout`更精确，没有4ms的最小延迟限制
+- 可以更高效地利用每一帧的剩余时间，提高应用的响应性
 
-> 为什么没有选择包装成一个微任务？
-> 因为微任务会在清空整个队列后，才会结束。所以在页面更新前会一直执行，直到队列被清空。 （微任务优先级最高）
+React的Scheduler就是利用`MessageChannel`来实现任务的精细调度，确保应用在保持高性能的同时，能够及时响应用户交互。

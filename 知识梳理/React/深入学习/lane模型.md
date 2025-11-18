@@ -35,7 +35,7 @@ export const IdleEventPriority: EventPriority = IdleLane;
 由于React中，不同的交互对应的**事件**回调中产生的update会有不同的优先级，因此优先级与事件有关。因此在React内部的优先级也被称之为EventPriority
 
 - DiscreteEventPriority
-  - 对应离散事件，例如： click、focus、blur等时间都是离散触发的
+  - 对应离散事件，例如： click、focus、blur等事件都是离散触发的
 - ContinuousEventPriority
   - 对应连续事件的优先级，例如：drag、mouseMove、scroll、touchMove等事件，都是连续触发的
 - DefaultEventPriority
@@ -176,16 +176,16 @@ export const OffscreenLane: Lane = /*                   */ 0b1000000000000000000
 ## 表达 **批**的概念
 
 ```js
-let bath = 0
+let batch = 0
 // 将laneA 和laneB 是不相邻的优先级
 const laneA = 0b0000000000000000000000001000000
 const laneB = 0b0000000000000000000000000000001
 
 // 将laneA 纳入批中
 
-bath |= laneA
+batch |= laneA
 // 将laneB 纳入批中
-bath |= laneB
+batch |= laneB
 
 ```
 

@@ -44,7 +44,7 @@ function FiberNode(
   this.return = null;
   // 指向第一个字Fiber节点的属性
   this.child = null;
-  // 指向下一个兄弟FIber节点的属性
+  // 指向下一个兄弟Fiber节点的属性
   this.sibling = null;
   // 当前Fiber在其他兄弟节点中的位置索引
   this.index = 0;
@@ -105,15 +105,16 @@ Fiber 本质上也是一个对象，是在之前React元素基础上的一种升
 
 ### 动态的工作单元
 在每个FiberNode 中，保存了本次更新中，该元素变化的数据，还有要执行的工作（增删改）
+>  可以看做是react工作过程中最小的动态工作单元
 ``` jsx 
 // 副作用相关
- this.flags = NoFlags;
-  this.subtreeFlags = NoFlags;
-  this.deletions = null;
+this.flags = NoFlags;
+this.subtreeFlags = NoFlags;
+this.deletions = null;
 
 // 与调度优先级有关
-  this.lanes = NoLanes;
-  this.childLanes = NoLanes;
+this.lanes = NoLanes;
+this.childLanes = NoLanes;
 
 
 ```
@@ -121,19 +122,21 @@ Fiber 本质上也是一个对象，是在之前React元素基础上的一种升
 
 ## Fiber 双缓冲
 
-Fiber架构中，的双缓冲工作原理，类似于显卡
-显卡分为前缓冲区 和后缓冲区。
-- 首先，前缓冲区会显示图像，之后，合成的新的图像会被写入到后缓冲区，一旦后缓冲区写入图像完毕，就会前后缓冲区进行一个呼唤
+Fiber架构中的双缓冲工作原理，类似于显卡
+显卡分为前缓冲区和后缓冲区：
+- 首先，前缓冲区会显示图像，之后，合成的新图像会被写入到后缓冲区
+- 一旦后缓冲区写入图像完毕，就会将前后缓冲区进行互换
 - 这种将数据保存在缓冲区再进行互换的技术，就被称之为双缓冲技术。
 
-所以，在Fiber架构中，有两颗Fiber tree，一颗是真实UI对应的Fiber，类似前缓冲区。另一颗是在内存中构建的Fiber tree，可以类比为显卡的后缓冲区。
+所以，在Fiber架构中，有两棵Fiber tree：
+- 一棵是真实UI对应的Fiber tree，类似前缓冲区
+- 另一棵是在内存中构建的Fiber tree，可以类比为显卡的后缓冲区
 
-在react源码中，很多方法都需要接收两颗FiberTree
+在React源码中，很多方法需要处理current和workInProgress两棵FiberTree
 
 ``` js
-current.alternate = workInProgress
-workInprogress.alternate = current;
-
+current.alternate = workInProgress;
+workInProgress.alternate = current;
 ```
 
 ### mount 阶段
@@ -161,29 +164,29 @@ function App(){
     
 }
 
-const rootElement = document.getElementByid('root')
+const rootElement = document.getElementById('root')
 ReactDOM.createRoot (rootElement).render(<App />)
 
 ```
 
-- 当执行ReactDOM.createRoot的时候，FiberRootNode.current =》 HostRootFiber 
-  - HostRootFiber 就是  <div id="root"></div>
+- 当执行ReactDOM.createRoot的时候，FiberRootNode.current 指向 HostRootFiber
+  - HostRootFiber是与root容器（即<div id="root"></div>）关联的Fiber节点
 - 进入mount流程
-  - 该流程会基于每个 React 元素，以深度优先的原则，依次生成wip FiberNode，并且每一个wip FiberNode会链接起来
-  - 生成的 wip FiberTree（正在构建的） 里面的每一个 FiberTree会和current FiberTree（当前界面上展示的） 里面的FiberNode进行关联。关联的方式就是通过alternate。
-  - 但是，目前currentFiberTree里面只有一个HostRootFiber（因为<div id="root"></div> 是空的），因此就只有这个HostRootFiber进行了alternate的关联。
-- 当wip FiberTre （新的FibeNode）生成完毕，就意味着render阶段完成了。此时FiberRootNode就会被传递给Render（渲染器），接下来就是进行渲染工作
-- 渲染工作完毕后，浏览器就就显示了对应的UI
-  - 此时FiberRootNode.current 就会指向这颗wip fiberTree
+  - 该流程会基于每个 React 元素，以深度优先的原则，依次生成wip FiberNode（wip -> work in progress fiber），并将它们链接起来
+  - 生成的 wip FiberTree（正在构建的）中的每一个 wip FiberNode会和current FiberTree（当前界面上展示的）中的对应FiberNode通过alternate属性进行关联
+  - 由于此时currentFiberTree中只有一个HostRootFiber（因为<div id="root"></div> 是空的），所以只有这个HostRootFiber进行了alternate的关联
+- 当wip FiberTree（新的FiberNode）生成完毕，就意味着render阶段完成了。此时FiberRootNode就会被传递给Renderer（渲染器），接下来就是进行渲染工作
+- 渲染工作完毕后，浏览器就显示了对应的UI
+  - 此时FiberRootNode.current 就会指向这颗wip FiberTree
   - 曾经的 Wip Fiber tree就会变成current FiberTree，完成双缓存的工作
 
 ### update 阶段
 - 当触发更新，就会开启update流程，此时就会生成一颗新的wip FiberTree，流程和mount一样
 - 新的wip FiberTree 里面的每一个FiberNode 和current Fiber Tree的每一个FiberNode，通过alternate属性进行关联
-- 当wip FiberTree生成完毕后，就会经历和之前一样的流程，FiberRootNode会被传递给Render进行渲染，此时宿主环境所渲染 出来的真实UI，对应的就是wip Fibertree（新的）所对应的DOM结构，FiberRootNode.current 就会指向它，而之前的 current（旧的），就会成为新的 wip fiberTree
+- 当wip FiberTree生成完毕后，就会经历和之前一样的流程，FiberRootNode会被传递给Renderer进行渲染。此时宿主环境渲染出来的真实UI对应的就是wip FiberTree（新的）所对应的DOM结构，FiberRootNode.current就会指向这颗新的wip FiberTree，而之前的current FiberTree会成为新的current FiberTree的alternate（即新的wip FiberTree的alternate指向旧的current FiberTree）。
 - 
  
-也就是说， 每一个  FiberRootNode 有2棵FiberTree， 一个是current FiberTree ，一个是Wip TFiberree
+也就是说，每个FiberRootNode有两棵FiberTree：current FiberTree和wip FiberTree
 
 
 
@@ -191,9 +194,9 @@ ReactDOM.createRoot (rootElement).render(<App />)
 ## 总结
 
 
-react16 以后引入的一种新的内部架构，是对react的核心算法重新实现，旨在提高react在动画，布局，手势等领域的实用性
+Fiber是React 16以后引入的一种新的内部架构，是对React核心算法的重新实现，旨在提高React在动画、布局、手势等领域的实用性
 
-主要热点是增量渲染，也就是说，它可以将渲染工作分割成多个小块，并在多个帧中完成，从而避免阻塞主线程。
+主要特点是增量渲染，也就是说，它可以将渲染工作分割成多个小块，并在多个帧中完成，从而避免阻塞主线程。
 
 
 ## 优势
@@ -205,28 +208,28 @@ react16 以后引入的一种新的内部架构，是对react的核心算法重�
 Fiber 可以从三个方面进行理解
 
 1. FiberNode 作为一种架构
-    - 在react V15 之前的版本，reconceiler采用的是递归的方式，到了v16之后，引入了Fiber, 从而将各个FiberNode之间通过链表的形式串联起来
+    - 在React V15之前的版本，Reconciler采用的是递归的方式，到了V16之后，引入了Fiber，从而将各个FiberNode之间通过链表的形式串联起来
 2. FiberNode 作为一种数据类型
-    - Fiber本质上是个对象，是之前虚拟DOM对象的一种升级版本，每个Fiber对象里面包含React元素的类型，周练威廉的FiberNode，DOM相关信息。
-3. FiberNode 作为动态的工作单元，在每个FiberNode中，保存了【本次更新中，该React元素变化的数据、要指向的工作（增删改等）】 等信息
+    - Fiber本质上是个对象，是之前虚拟DOM对象的一种升级版本，每个Fiber对象里面包含React元素的类型、周围链接的FiberNode以及DOM相关信息。
+3. FiberNode 作为动态的工作单元，在每个FiberNode中保存了本次更新中该React元素变化的数据以及要执行的工作（增删改等）信息
 
 
 ## Fiber的设计思路
 
-帧的概念， 10000/60   16ms，如果在16ms内完成渲染，那么就会保持60fps，如果超过了16ms，那么就会掉帧，导致卡顿。
+帧的概念：1000ms/60 ≈ 16ms，如果在16ms内完成渲染，那么就会保持60fps，如果超过了16ms，那么就会掉帧，导致卡顿。
 
-1. fiber 实现了一个基于优先级和requestIdleCallback的调度器, 将任务拆分为多个小任务
-    * 为了方便控制进度。 中止、恢复
+1. Fiber实现了一个基于优先级和requestIdleCallback的调度器，将任务拆分为多个小任务
+    * 便于控制进度（中止、恢复）
 
-2. fiber 是把 render/update 分片，拆解成多个小任务来执行，每次只检查树上部分节点，昨晚此部分后，若当前一帧内还有足够的时间，就继续做下一个小任务，时间不够就暂停，等主线程空闲后，再继续下一个小任务。
+2. Fiber 是把 render/update 阶段分片，拆解成多个小任务来执行。每次只检查树上部分节点，做完此部分后，若当前一帧内还有足够的时间，就继续做下一个小任务；若时间不够，就暂停任务，等主线程空闲后再继续执行。
 
-3. fiber 是一个链表结构，每个节点就是一个fiber对象，每个fiber对象就是一个任务，每个任务都有一个优先级，优先级高的先执行，优先级低的后执行，优先级相同的，就按照顺序执行。 fiber node
+3. Fiber 是一个链表结构，每个节点就是一个Fiber对象，每个Fiber对象代表一个任务，每个任务都有一个优先级。优先级高的任务先执行，优先级低的任务后执行，优先级相同的任务按照顺序执行。
 
-也正是因为这个原因，所以组件更新过程中，render中的 componentWillMount componentWillReceiveProps componentWillUpdate这几个会频繁调用，所以取消掉了。
+也正是因为异步渲染的原因，React V15中的一些生命周期方法（如componentWillMount、componentWillUpdate等）可能会被多次调用，因此在React 16.3之后被废弃，推荐使用新的生命周期方法代替。
 
 
 
 ## 双缓冲的理解
-而所谓的Fiber双缓冲树，就是在内存中构建两颗树，一个叫current FiberTree，指的是当前浏览器显示的UI，另一个叫 work in Progress FiberTree，指的是正在构建的内容。
-这两颗树在渲染更新中交替更替，通过alternate指针互相指向。这样在下一次渲染的时候，直接复用 wip FiberTree作为下一次的渲染树，而上一次的渲染树又作为新的 wip FiberTree。 这样可以加快DOM节点的替换与更新。
+而所谓的Fiber双缓冲树，就是在内存中构建两棵树：一棵是current FiberTree，对应当前浏览器显示的UI；另一棵是workInProgress FiberTree，对应正在构建的内容。
+这两棵树在渲染更新中交替更替，通过alternate指针互相指向。这样在下一次渲染的时候，直接复用 workInProgress FiberTree作为下一次的渲染树，而上一次的渲染树又作为新的 workInProgress FiberTree。这样可以加快DOM节点的替换与更新。
 

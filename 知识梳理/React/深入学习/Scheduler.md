@@ -6,7 +6,7 @@
 ### 全局变量
 
 
-```jsx
+```javascript
 
 // Max 31 bit integer. The max integer size in V8 for 32-bit systems.
 // Math.pow(2, 30) - 1
@@ -35,7 +35,7 @@ var isHostTimeoutScheduled = false; // 是否有延迟任务正在调度
 
 这个函数的主要目的就是调度任务
 
-```jsx 
+```javascript 
 
 
 /**
@@ -99,7 +99,7 @@ function unstable_scheduleCallback(
     priorityLevel, // 任务优先级
     startTime, // 任务开始时间
     expirationTime, // 任务过期时间
-    sortIndex: -1, //  用于小顶堆排序（一阵算法，可以始终从任务队列中，拿出最优先的任务），进行排序的索引
+    sortIndex: -1, // 用于小顶堆排序（一种算法，可以始终从任务队列中拿出最优先的任务），进行排序的索引
   };
 
 
@@ -164,7 +164,7 @@ function unstable_scheduleCallback(
 
 ## requestHostCallback 和 schedulePerformWorkUntilDeadline
 
-```jsx
+```javascript
  
 
 
@@ -224,7 +224,7 @@ if (typeof localSetImmediate === 'function') {
 
 ## performWorkUntilDeadline
 
-```jsx 
+```javascript 
 
 /**
  * 这个方法主要是根据条件，调用flushWork
@@ -267,7 +267,7 @@ const performWorkUntilDeadline = () => {
 
 ## flushWork && workLoop
 
-```jsx 
+```javascript 
 /**
  * 
  * @param initialTime 执行当前任务时，开始执行的时间
@@ -335,16 +335,15 @@ function workLoop(initialTime: number) {
     currentTask !== null &&
     !(enableSchedulerDebugging && isSchedulerPaused)
   ) {
-    // 如果当前任务的过期时间，> 当前任务的时间，说明见任务还没有过期
-    // shouldYieldToHost 是否应该暂停，归还主线程
-    // 跳出循环
-    if (currentTask.expirationTime > currentTime && shouldYieldToHost()) {
+    // 如果当前任务的过期时间 > 当前时间，说明该任务还没有过期
+        // shouldYieldToHost 判断是否应该暂停并归还主线程
+        if (currentTask.expirationTime > currentTime && shouldYieldToHost()) {
       // This currentTask hasn't expired, and we've reached the deadline.
       break;
     }
 
-    // 没有进入到上面的逻辑，就说明进入到过期时间，并且有剩余的时间来执行，
-    const callback = currentTask.callback;
+    // 未进入上面的逻辑，说明任务已过期或有剩余时间执行
+        const callback = currentTask.callback;
     if (typeof callback === 'function') {
       currentTask.callback = null;
       currentPriorityLevel = currentTask.priorityLevel;
@@ -387,9 +386,8 @@ function workLoop(initialTime: number) {
 
   // Return whether there's additional work
   if (currentTask !== null) {
-  // 如果不为空，则代表还有任务，则返回true，让外部的 hasMoreWork 拿到
-
-    return true;
+        // 如果不为空，则代表还有任务，返回true给外部的hasMoreWork
+        return true;
   } else {
     // 说明 taskQueue 普通任务队列为空，则从 timerQueue里获取 延迟 任务
     const firstTimer = peek(timerQueue);
@@ -414,9 +412,9 @@ function workLoop(initialTime: number) {
 
 ## shouldYieldToHost
 
-这个方法主要就是用来判断是否要归还主线程，让浏览器进行更高优先级的任务。值得注意的是，虽然一帧有16ms，但是React内部是以5ms作为一个单位的时间切片进行循环检查。
+这个方法主要用来判断是否要归还主线程，让浏览器进行更高优先级的任务。值得注意的是，虽然一帧约有16ms，但React内部默认以5ms作为时间切片单位进行循环检查。
 
-```jsx
+```javascript
 
 function shouldYieldToHost(): boolean {
   // getCurrentTime 这个是获取的当前的时间
@@ -472,7 +470,7 @@ function shouldYieldToHost(): boolean {
 
 
 
-```jsx 
+```javascript 
 
 /**
  * 遍历timerQueue，将已经过期的任务，插入到taskQueue任务里
@@ -483,13 +481,13 @@ function advanceTimers(currentTime: number) {
 //  从延迟任务队列，获取一个任务
   let timer = peek(timerQueue);
   while (timer !== null) {
-    // 如果任务么有对应的callback，则直接推出
+    // 如果任务没有对应的callback，则直接弹出
     if (timer.callback === null) {
       // Timer was cancelled.
       pop(timerQueue);
     } else if (timer.startTime <= currentTime) {
       // 当前任务已经超过了它的预期执行时间，已经过期。需要立即执行，
-      // 则需要将其退出，然后push仅 taskQueue队列
+      // 则需要将其弹出，然后push到taskQueue队列
       // Timer fired. Transfer to the task queue.
       pop(timerQueue);
       timer.sortIndex = timer.expirationTime;
@@ -503,8 +501,8 @@ function advanceTimers(currentTime: number) {
       // Remaining timers are pending.
       return;
     }
-    // 从timerQuqeue再获取一个任务进行遍历
-    timer = peek(timerQueue);
+    // 从timerQueue再获取一个任务进行遍历
+      timer = peek(timerQueue);
   }
 }
 ```
@@ -517,7 +515,7 @@ function advanceTimers(currentTime: number) {
 ## requestHostTimeout
 对延迟任务的处理，实际上就是调用setTimeOut
 
-```jsx
+```javascript
 
  /**
  * 
@@ -528,7 +526,7 @@ function requestHostTimeout(
   callback: (currentTime: number) => void,
   ms: number,
 ) {
-  // 下面这个就是setTimeOut
+  // 下面这个就是setTimeout
   taskTimeoutID = localSetTimeout(() => {
     callback(getCurrentTime());
   }, ms);
@@ -547,20 +545,20 @@ function requestHostTimeout(
  * @param currentTime 当前时间
  */
 function handleTimeout(currentTime: number) {
-    // 将 是否有任务需要执行 的标志位 置为 false
+    // 将是否有延迟任务正在调度的标志位设置为false
     isHostTimeoutScheduled = false;
     // 遍历 timerQueue，找出所有已经到期的任务
     advanceTimers(currentTime);
   
     if (!isHostCallbackScheduled) {
-        // 从普通任务队列中取出第一个任务
+        // 检查普通任务队列是否有任务
       if (peek(taskQueue) !== null) {
 
         isHostCallbackScheduled = true;
         // 采用普通任务的调度方式调度
         requestHostCallback();
       } else {
-        // 普通任务队列执行完毕，就再次从延迟任务里取一个任务出来
+        // 普通任务队列没有任务，检查延迟任务队列
         const firstTimer = peek(timerQueue);
         if (firstTimer !== null) {
             // 如果有任务，就采用延迟任务的调度方式调度
@@ -571,3 +569,9 @@ function handleTimeout(currentTime: number) {
   }
 
 ```
+
+
+两队列，分先后：timerQueue（预约架）、taskQueue（待做架）；
+三函数，控节奏：advanceTimers（查预约）、shouldYield（控休息）、performWork（真执行）；
+一闹钟，保不漏：schedulePerform（设提醒，下次继续干）；
+核心是，不卡 UI：时间切片 + 优先级，用户操作不等待！

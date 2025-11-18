@@ -11,7 +11,7 @@ function myNew(fn,...args){
     if(typeof result === 'object' && result !== null){
         return result
     }
-    // 负责返回新对象
+    // 否则返回新对象
     return obj
 
 }

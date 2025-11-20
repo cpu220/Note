@@ -536,7 +536,7 @@ function requestHostTimeout(
 ```
 
 ## handleTimeout
-主要是将时间已经到了的延迟任务，放入普通任务队列中，然后，使用requestHostCallback 进行任务调度
+主要是将时间已经到了的延迟任务，放入普通任务队列中， 然后，使用requestHostCallback 进行任务调度
 
 
 ``` jsx

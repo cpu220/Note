@@ -1,302 +1,300 @@
 # Diff 算法
 
-react在执行render过程中，会产生新的虚拟DOM (fiber tree)，在浏览器里，为了尽量减少DOM的创建，所以会对新旧DOM进行diff对比，找出差异性。
-    
-    - 这里的 diff，是指 current FiberNode 和 jsx 对象之间进行对比，然后生成新的 wip FiberNode （work In Progress Fiber Node）
-    
-    - diff算法本身是有性能上的消耗，在React文档中有提到，即便采用最前沿的算法，如果要完整的对比两棵树，那么算法的复杂度都会达到O(n^3)，n代表的是元素的数量。所以在实际的操作中，react会对比同一层级的元素，而不会跨层级对比，这样就可以将复杂度降低到O(n)
+React 在执行 render 过程中，会产生新的虚拟 DOM（Fiber Tree）。为了尽量减少浏览器中 DOM 的创建和修改，React 会对新旧虚拟 DOM 进行 Diff 对比，找出差异性。
 
+## 核心概念
 
-# 1. diff策略
+### Diff 是什么
+- Diff 是指 **current FiberNode** 和 **JSX 对象** 之间的对比
+- 对比后生成新的 **wip FiberNode**（Work In Progress Fiber Node）
 
-1. 同级比较
+### 时间复杂度优化
+- 若采用完整的树对比算法，复杂度会达到 **O(n³)**（n 为元素数量）
+- React 仅对 **同一层级** 的元素进行对比，将复杂度降低到 **O(n)**
 
-* 考虑到在实际DOM操作中需要跨层级操作的次数较少，所以react只会对同级进行比较，不会跨层级比较。
-* 所以diff操作时，只需要对树遍历一次就可以了。
-    * 将一颗节点的子叶移到另一个节点下面，不会直接移动，而是删除后再创建。
+---
 
+# 1. Diff 策略
 
-* 主要是通过元素类型和key进行对比，所以className变更，只会修改className的属性，不会修改元素
+## 1.1 同级比较
 
+### 核心规则
+* React 仅对 **同一层级** 的元素进行对比，不会跨层级比较
+* 树遍历一次即可完成 Diff 操作
+* 跨层级移动节点会被视为：**删除旧节点 + 创建新节点**
 
-## 单节点diff
+### 对比依据
+* 主要通过 **元素类型** 和 **key** 进行对比
+* 若仅修改元素属性（如 className），不会重建元素，仅更新属性
 
-新节点为单一节点，旧节点数量不一定
-单节点diff是否能够复用，遵循一下流程
-- 判断key是否相同
-    - 如果更新前后没有设置key，那么key就是null，则被认为key相同
-    - 如果key相同，就会进入下一步
-    - 如果key不同，就无需判断type，结果直接为不能复用，如果有兄弟节点，还会去遍历兄弟节点
-- 如果key相同，再判断type是否相同
-    - 如果type相同，就复用
-    - 如果type不同，无法复用，并且兄弟节点也一并标记为删除
+---
 
-### 案例一
+# 2. 单节点 Diff
 
-更新前
-``` html
-<ul>
-    <li>1</li>
-    <li>2</li>
-    <li>3</li>
-</ul>
+新节点为单一节点，旧节点数量不定。判断能否复用遵循以下流程：
 
-```
+## 2.1 复用判断流程
 
-更新后
+### 步骤 1：判断 key 是否相同
+- 若更新前后未设置 key，则 key 为 `null`，被认为相同
+- 若 key 相同，进入下一步判断
+- 若 key 不同：
+  - 当前 FiberNode 无法复用
+  - 遍历兄弟 FiberNode，寻找可复用节点
+
+### 步骤 2：判断 type 是否相同
+- 若 type 相同：复用 FiberNode，仅更新 props
+- 若 type 不同：
+  - 当前 FiberNode 无法复用
+  - 兄弟节点也会被标记为删除状态
+
+## 2.2 案例分析
+
+### 案例 1：无 key + type 不同
 ```html
+<!-- 更新前 -->
 <ul>
-    <p>1</p>
+  <li>1</li>
+  <li>2</li>
+  <li>3</li>
 </ul>
 
+<!-- 更新后 -->
+<ul>
+  <p>1</p>
+</ul>
 ```
+- 无 key，视为 key 相同
+- type 不同（li → p），无法复用
+- 兄弟 FiberNode 均被标记为删除
 
-- 因为没有设置key，所以会被认为key相同，然后进入type的判断
-- 发现type不同，所以无法复用
-- 将兄弟元素fiberNode 标记为删除状态
-
-如果key不同，只能代表当前的FiberNode 无法复用，因此还需要遍历兄弟的FiberNode，看是否有可以复用的
-
-### 案例二
-
-更新前
-``` html
+### 案例 2：key 不同
+```html
+<!-- 更新前 -->
 <div key="1">1</div>
 
-```
-
-更新后
-``` html
+<!-- 更新后 -->
 <div key="2">2</div>
-
 ```
-- 更新前后key不同，则不需要判断type，直接标记为删除
+- key 不同，无需判断 type
+- 旧节点直接被标记为删除
 
-
-### 案例三
-
-更新前
+### 案例 3：key 相同 + type 相同
 ```html
+<!-- 更新前 -->
 <div key="1">1</div>
 
-```
-
-更新后
-```html
+<!-- 更新后 -->
 <div key="1">2</div>
-
 ```
+- key 相同，type 相同
+- 复用 FiberNode，仅更新 content
 
-- 判断key相同，进入type判断
-- 判断type也相同
-- 复用FiberNode，只是更新了props
+---
 
+# 3. 多节点 Diff
 
-# 多节点diff
-所谓多节点，指的是新节点有多个
+新节点有多个时，进入多节点 Diff 流程。React 团队发现：**日常开发中，更新操作远多于增删移动**。
 
-React 团队发现，在日常开发中，对节点的操作中，更新情况多余节点的增、删、移动。因此在多节点diff的时候，会进行两轮遍历
-- 第一轮遍历，会尝试逐个的复用节点
-- 第二轮遍历处理上级一轮中，没有处理完的节点
+因此，多节点 Diff 分为两轮遍历：
+1. 第一轮：逐个尝试复用节点
+2. 第二轮：处理剩余未遍历的节点
 
-## 第一轮遍历
-第一轮遍历会从前往后依次遍历，存在三种情况
-- 如果新旧子节点的key和type 都相同，说明可以服用
-- 如果新旧子节点的key相同，但type不相同。
-    - 这时候会根据ReactElement来生成一个全新的fiber
-    - 旧的fiber被放入到deletion数组里面， 后面再统计以删除。
-    - 注意的是，此时遍历不会终止
-- 如果新旧子节点的key和type都不相同，结束遍历
+## 3.1 第一轮遍历
 
-### 案例一
+### 遍历规则
+从前往后依次遍历新旧子节点，存在三种情况：
 
-更新前
+1. **key 和 type 都相同**：复用节点，继续遍历
+
+2. **key 相同但 type 不同**：
+   - 根据新 JSX 创建全新 FiberNode
+   - 旧 FiberNode 放入 `deletion` 数组，后续统一删除
+   - **遍历不会终止**，继续向后处理
+
+3. **key 和 type 都不同**：**终止遍历**，进入第二轮
+
+### 案例分析
+
+#### 案例 1：key 不同导致提前终止
 ```html
+<!-- 更新前 -->
 <div>
-    <div key='a'>a</div>
-    <div key='b'>b</div>
-    <div key='c'>c</div>
-    <div key='c'>d</div>
-</div>
-```
-
-更新后
-```html
-<div>
-    <div key='a'>a</div>
-    <div key='b'>b</div> 
-    <div key='e'>e</div> 
-    <div key='d'>d</div>
-</div>
-```
-
-- 先遍历到 div.key.a 发现该 fiber node 能够复用
-- 继续往后走，发现 div.key.b 能够复用，继续往后走
-- dev.key.e，发现key不同，因此第一轮遍历结束
-
-### 案例二
-
-更新前
-```html
-<div>
-    <div key='a'>a</div>
-    <div key='b'>b</div>
-    <div key='c'>c</div>
-    <div key='c'>d</div>
-</div>
-```
-
-更新后
-```html
-<div>
-    <div key='a'>a</div>
-    <div key='b'>b</div> 
-    <p key='c'>c</p> 
-    <div key='d'>d</div>
+  <div key="a">a</div>
+  <div key="b">b</div>
+  <div key="c">c</div>
+  <div key="d">d</div>
 </div>
 
-```
-
-- 先遍历到 div.key.a 发现该 fiber node 能够复用
-- 继续往后走，发现 div.key.b 能够复用，继续往后走
-- 发下第三个节点key相同，但是type不同
-    - 将旧的fiber node 放入deletion数组，后面再统一删除
-    - 根据新的react元素，创建一个新的fiber node
-    - 但是此时的遍历不会结束的，会继续往后走
-
-
-## 第二轮遍历
-如果第一轮遍历背提前终止，那么就意味着有新的React元素以及旧的FiberNode没有遍历完，此时就会采用第二轮遍历。
-
-第二轮会处理三种情况
-
-1. 只剩下旧子节点：将旧的子节点添加到deletions数组里面直接删除（删除的情况）
-2. 只剩下新的jsx元素：根据ReactElement 元素来创建FiberNode节点（西能的情况）
-3. 新旧子节点都有剩余：
-    - 会将剩余的FiberNode 节点放入一个map里面，遍历剩余的新的JSX元素，然后从map中寻找能够复用的FiberNode节点，如果能够找到，就拿来付佣金。（移动的情况）
-    - 如果找不到，就新增。然后，如果剩余的JSX元素都遍历完了，map结构中还有剩余的Fiber节点，就将这些FIber节点添加到deletions数组里，之后统一删除。
-
-
-
-### 只剩下旧子节点
-
-更新前
-```html
+<!-- 更新后 -->
 <div>
-    <div key='a'>a</div>
-    <div key='b'>b</div>
-    <div key='c'>c</div>
-    <div key='c'>d</div>
+  <div key="a">a</div>
+  <div key="b">b</div>
+  <div key="e">e</div>
+  <div key="d">d</div>
 </div>
 ```
+- `key="a"` 和 `key="b"` 可复用
+- 遇到 `key="e"` 时，与旧节点 `key="c"` 不同，终止第一轮遍历
 
-更新后
+#### 案例 2：key 相同但 type 不同
 ```html
+<!-- 更新前 -->
 <div>
-    <div key='a'>a</div>
-    <div key='b'>b</div> 
- 
+  <div key="a">a</div>
+  <div key="b">b</div>
+  <div key="c">c</div>
+  <div key="d">d</div>
+</div>
+
+<!-- 更新后 -->
+<div>
+  <div key="a">a</div>
+  <div key="b">b</div>
+  <p key="c">c</p>
+  <div key="d">d</div>
 </div>
 ```
+- `key="a"` 和 `key="b"` 可复用
+- `key="c"` 相同但 type 不同（div → p）：
+  - 旧节点放入 `deletion` 数组
+  - 根据新 JSX 创建 `<p>` 节点
+  - 遍历继续，处理 `key="d"`
 
-遍历前面2个节点，发现可以复用，就会复用前面的节点，对于React元素来讲，遍历完前面两个，就已经遍历结束，因此剩下的FiberNode就会被放入deletions 数组里面，之后统一删除
+## 3.2 第二轮遍历
 
+若第一轮遍历提前终止，进入第二轮处理剩余节点。
 
-### 只剩下新子节点
+### 三种情况处理
 
-更新前
+#### 1. 只剩下旧子节点
+- 将剩余旧节点 **全部放入 `deletion` 数组**，后续统一删除
+
+#### 2. 只剩下新 JSX 元素
+- 根据剩余新 JSX 元素 **创建新 FiberNode**
+
+#### 3. 新旧子节点都有剩余
+1. 将剩余旧 FiberNode 放入 **Map** 缓存（key 为节点的 key）
+2. 遍历剩余新 JSX 元素：
+   - 从 Map 中寻找可复用节点（key 和 type 都相同）
+   - 若找到：复用节点
+   - 若找不到：创建新节点
+3. Map 中剩余的旧 FiberNode：放入 `deletion` 数组，后续统一删除
+
+### 案例分析
+
+#### 案例 1：只剩下旧子节点
 ```html
+<!-- 更新前 -->
 <div>
-    <div key='a'>a</div>
-    <div key='b'>b</div>
-    
+  <div key="a">a</div>
+  <div key="b">b</div>
+  <div key="c">c</div>
+  <div key="d">d</div>
+</div>
+
+<!-- 更新后 -->
+<div>
+  <div key="a">a</div>
+  <div key="b">b</div>
 </div>
 ```
+- 前 2 个节点可复用
+- 剩余旧节点 `key="c"` 和 `key="d"` 放入 `deletion` 数组
 
-更新后
+#### 案例 2：只剩下新子节点
 ```html
+<!-- 更新前 -->
 <div>
-    <div key='a'>a</div>
-    <div key='b'>b</div> 
-    <div key='c'>c</div>
-    <div key='c'>d</div>
+  <div key="a">a</div>
+  <div key="b">b</div>
+</div>
+
+<!-- 更新后 -->
+<div>
+  <div key="a">a</div>
+  <div key="b">b</div>
+  <div key="c">c</div>
+  <div key="d">d</div>
 </div>
 ```
+- 旧节点遍历结束
+- 剩余新节点 `key="c"` 和 `key="d"` 被创建
 
-遍历完dev.key.b， 旧节点遍历结束，此时剩下的新节点，就会根据ReactElement来创建FiberNode节点 
-
-### 新旧子节点都有剩余
-
-更新前
+#### 案例 3：新旧子节点都有剩余
 ```html
+<!-- 更新前 -->
 <div>
-    <div key='a'>a</div>
-    <div key='b'>b</div> 
-    <div key='c'>c</div>
-    <div key='c'>d</div>
-    
+  <div key="a">a</div>
+  <div key="b">b</div>
+  <div key="c">c</div>
+</div>
+
+<!-- 更新后 -->
+<div>
+  <div key="a">a</div>
+  <div key="c">c</div>
+  <div key="b">b</div>
 </div>
 ```
+- **第一轮遍历**：`key="a"` 可复用，`key="b"` 与新节点 `key="c"` 不同，终止
+- **第二轮遍历**：
+  1. 剩余旧节点 `key="b"`、`key="c"` 放入 Map
+  2. 遍历剩余新节点 `key="c"`、`key="b"`：
+     - 从 Map 中找到 `key="c"` → 复用
+     - 从 Map 中找到 `key="b"` → 复用
+  3. Map 中无剩余节点
 
-更新后
-```html
-<div>
-    <div key='a'>a</div>
-    <div key='c'>c</div>
-    <div key='b'>b</div> 
-    <div key='c'>d</div>
-</div>
-```
-- 第一轮遍历
-    - dev.key.a 能够复用，然后下一个
-    - dev.key.b  key 不一样，循环重点
-- 第二轮遍历
-    - 首先，会将剩余的旧的FiberNode放入到一个map里面
-    - 遍历剩下的jsx 对象数组 ，遍历的同时，从map里面寻找能够复用的FiberNode节点
-        - 如果能够找到，就拿来复用
-        - 如果找不到，就新增
-    - 如果整个jsx 对象数组遍历完，map里还有剩余的FiberNode节点，说明这些FiberNode是无法进行复用，直接放入deletions数组里面，后面统一删除
+---
 
+# 4. 双端对比算法
 
-# 双端对比算法
-指的是，在新旧子节点的数组中，各有两个指针指向头尾，然后依次向中间靠拢，进行比较。
-- 在新子节点数组中，会有2个指针， nextStartIndex 和 nextEndIndex分别指向新子节点的头和尾
-- 在旧节点数组中，也会有2个指针，oldStartIndex 和 oldEndIndex 分别指向旧子节点的头和尾
+双端对比算法是另一种 Diff 策略：
+- 在新旧子节点数组中，各有两个指针指向头尾
+- 依次向中间靠拢进行比较：
+  1. 新前 vs 旧前
+  2. 新后 vs 旧后
+  3. 新后 vs 旧前
+  4. 新前 vs 旧后
+- 若匹配成功，更新指针（向中间移动）
 
-每遍历一次，就会尝试进行双端比较
-    - 新前 vs 旧前
-    - 新后 vs 旧后
-    - 新后 vs 旧前
-    - 新前 vs 旧后
-如果匹配成功，更新双端指针（向中间移动）
-    - 不是4次对比完成后移动，而是
-    - 新前 vs 旧前 比对成功，则    nextStartIndex++ 、 在旧节点数组中，也会有2个指针，oldStartIndex++
+## 4.1 为什么 React 不采用双端对比算法
 
-# 为什么react 不采用双端对比算法
-
-
-```
-// 官方解释 位置在 packages/react-reconciler/src/ReactChildFiber.js
-// reconcileChildrenArray  
-
-
+### 官方注释解释
+```javascript
 // This algorithm can't optimize by searching from both ends since we
 // don't have backpointers on fibers. I'm trying to see how far we can get
 // with that model. If it ends up not being worth the tradeoffs, we can
 // add it later.
-
-// Even with a two ended optimization, we'd want to optimize for the case
-// where there are few changes and brute force the comparison instead of
-// going for the Map. It'd like to explore hitting that path first in
-// forward-only mode and only go for the Map once we notice that we need
-// lots of look ahead. This doesn't handle reversal as well as two ended
-// search but that's unusual. Besides, for the two ended optimization to
-// work on Iterables, we'd need to copy the whole set.
-
-// In this first iteration, we'll just live with hitting the bad case
-// (adding everything to a Map) in for every insert/move.
-
-// If you change this code, also update reconcileChildrenIterator() which
-// uses the same algorithm.
-
 ```
+
+### 核心原因
+
+#### 1. **Fiber 节点没有反向指针**
+Fiber 架构中，同一层级节点通过 `sibling` 属性连接，形成 **单向链表**，只能从左到右遍历，无法直接访问前一个节点。而双端对比算法需要同时从两端向中间遍历，实现复杂。
+
+#### 2. **性能权衡**
+React 团队认为：
+- 大多数实际场景中，节点移动操作相对较少
+- 双端对比算法的实现复杂性和性能开销可能超过其收益
+
+#### 3. **其他优化手段**
+React 采用 **Map 缓存剩余节点** 的方式处理移动操作，在大多数情况下已能提供良好性能。
+
+### 重要说明
+React 不采用双端对比算法 **不意味着** 其 Diff 效率低下。相反，React 通过 Fiber 架构和其他优化手段，在保证 UI 更新流畅性的同时，提供了高效的 Diff 对比机制。
+
+---
+
+# 总结
+
+React Diff 算法通过以下策略实现高效对比：
+1. **同级比较**：将复杂度降低到 O(n)
+2. **key 机制**：提高节点复用率
+3. **两轮遍历**：优化多节点场景
+4. **单向链表**：简化 Fiber 架构实现
+
+理解 Diff 算法有助于我们在开发中：
+- 合理设置 key，提高性能
+- 避免不必要的节点层级变动
+- 写出更高效的 React 组件

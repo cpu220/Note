@@ -121,7 +121,7 @@ BeforeMutation阶段的主要工作发生在 **commitBeforeMutationEffects_compl
  */
 function commitBeforeMutationEffectsOnFiber(finishedWork){
   const current = finishedWork.alternate;
-  const flags = finishedWork.falgs;
+  const flags = finishedWork.flags;
   
   //...
   // Snapshot 表示 ClassComponent 存在更新，且定义了 getSnapsshotBeforeUpdate 方法
@@ -147,7 +147,7 @@ function commitBeforeMutationEffectsOnFiber(finishedWork){
         // 清空 HostRoot 挂载的内容，方便 Mutation 阶段渲染
         if(supportsMutation){
           const root = finishedWork.stateNode;
-          clearCOntainer(root.containerInfo);
+          clearContainer(root.containerInfo);
         }
         break;
       }
@@ -265,14 +265,14 @@ function commitMutationEffectsOnFiber(finishedWork, root){
       // 执行 Placement 对应操作
       commitPlacement(finishedWork);
       // 执行完 Placement 对应操作后，移除 Placement flag
-      finishedWork.falgs &= ~Placement;
+      finishedWork.flags &= ~Placement;
       break;
     }
     case PlacementAndUpdate:{
       // 执行 Placement 对应操作
       commitPlacement(finishedWork);
       // 执行完 Placement 对应操作后，移除 Placement flag
-      finishedWork.falgs &= ~Placement;
+      finishedWork.flags &= ~Placement;
       
       // 执行 Update 对应操作
       const current = finishedWork.alternate;
@@ -398,8 +398,8 @@ root.current = finishedWork;
 在这一阶段，主要的工作集中在  commitLayoutEffectOnFiber 函数中，该函数会遍历 effectList 链表，对于不同的FiberNode，执行不同的操作。执行一些副作用函数，比如 useEffect、useLayoutEffect 的回调函数。
 
 
-- 对应 classComponent ： 该阶段会指向 componentDidMount、componentDidUpdate方法
-- 对于 FunctionComponent： 该阶段会指向 useEffect、useLayoutEffect 的回调函数
+- 对应 classComponent ： 该阶段会调用 componentDidMount、componentDidUpdate 方法
+- 对于 FunctionComponent： 该阶段会调用 useLayoutEffect 的回调函数，useEffect 的回调函数会在 Layout 阶段之后异步执行
 
 ---
 
@@ -410,6 +410,16 @@ root.current = finishedWork;
 ## BeforeMutation 的改动
 
 不同于之前，对于deletions的操作是放在  **commitMutationEffects_begin** 里，新版函数改成了 **recursivelyTraverseMutationEffects** 
+
+> recursivelyTraverseMutationEffects 替代了旧的 commitMutationEffects_begin，但这背后的核心目标是 适配 React 18 的并发渲染、自动批处理等新特性，让副作用处理更高效、更稳定。
+> 核心逻辑没变 —— 还是 “先处理 deletions，再处理其他 Mutation 副作用”,无论函数名怎么改，React Commit 阶段的 Mutation 阶段核心流程始终不变：
+1. 先处理 deletions 数组（删除旧 DOM 节点）；
+2. 再遍历 workInProgress 树，处理其他 Mutation 副作用（如插入新节点、更新节点属性）。
+> 这是因为：必须先删除不需要的旧节点，再插入 / 更新新节点，避免 DOM 结构混乱（比如新节点插入到已删除的旧节点位置）。
+
+为什么改函数名？—— 从 “阶段开始” 到 “递归遍历” 的逻辑聚焦
+
+- 旧函数名 commitMutationEffects_begin 强调的是 “Mutation 阶段的开始步骤”，而新函数名 recursivelyTraverseMutationEffects 更准确地描述了 “通过递归遍历 Fiber 树，批量处理所有 Mutation 副作用” 的核心行为。
 
 而之前放在commitBeforeMutationEffects_begin里，新版本抽象为 **commitPassiveUnmountEffects_begin**
 
@@ -678,3 +688,10 @@ commit 主要是3个阶段
 - BeforeMutation 阶段，主要是处理ClassComponent、HostRoot 两种类型的FiberNode
 - Mutation 阶段，主要是处理DOM的增删改
 - Layout 阶段，会根据不同的FiberNode的类型不同，执行对应的副作用函数
+
+按照类比的话
+
+BeforeMutation 是拿着设计图(wip.fiberTree)准备处理装修前的准备工作
+Mutation 按照设计图(wip.fiberTree)，进行装修（处理DOM的增删改）
+装修完成后，将 wip.fiberTree（当前的设计图） 进行互换 current.fiberTree （之前的设计图）
+Layout 阶段，就是处理装修后的副作用

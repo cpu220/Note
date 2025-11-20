@@ -109,7 +109,7 @@ React 在执行 render 过程中，会产生新的虚拟 DOM（Fiber Tree）。�
 
 2. **key 相同但 type 不同**：
    - 根据新 JSX 创建全新 FiberNode
-   - 旧 FiberNode 放入 `deletion` 数组，后续统一删除
+   - 旧 FiberNode 放入 `deletion` 数组，后续统一删除 (deletion数组，挂载在当前workInProgress FiberNode根节点上，全局就只有这么一个)
    - **遍历不会终止**，继续向后处理
 
 3. **key 和 type 都不同**：**终止遍历**，进入第二轮

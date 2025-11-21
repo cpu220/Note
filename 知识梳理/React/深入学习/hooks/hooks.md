@@ -10,23 +10,55 @@
 // 初始化的时候，会调用这个方法
 // 关键词 mount （挂载）
 const HooksDispatcherOnMount: Dispatcher = {
+  // readContext: 读取Context值的函数，用于useContext和Context消费
   readContext,
 
+  // use: React 18新增的Suspense并发原语，用于处理异步值
   use,
+  
+  // useCallback: 初始化记忆化回调函数的实现，返回一个记忆化的回调函数
   useCallback: mountCallback,  
+  
+  // useContext: 与readContext相同，用于读取Context值
   useContext: readContext, 
+  
+  // useEffect: 初始化副作用的实现，在组件挂载后执行
   useEffect: mountEffect,
+  
+  // useImperativeHandle: 初始化自定义ref暴露值的实现
   useImperativeHandle: mountImperativeHandle,
+  
+  // useLayoutEffect: 初始化布局副作用的实现，在DOM更新后同步执行
   useLayoutEffect: mountLayoutEffect,
+  
+  // useInsertionEffect: React 18新增，用于CSS-in-JS库的插入样式实现
   useInsertionEffect: mountInsertionEffect,
+  
+  // useMemo: 初始化记忆化值的实现，返回一个记忆化的值
   useMemo: mountMemo,
+  
+  // useReducer: 初始化状态管理器的实现，类似于Redux的状态管理
   useReducer: mountReducer,
+  
+  // useRef: 初始化ref对象的实现，返回一个可变的ref对象
   useRef: mountRef,
+  
+  // useState: 初始化状态的实现，返回状态值和更新函数
   useState: mountState,
+  
+  // useDebugValue: 开发环境下用于调试自定义Hook的实现
   useDebugValue: mountDebugValue,
+  
+  // useDeferredValue: React 18新增，用于延迟更新低优先级的值
   useDeferredValue: mountDeferredValue,
+  
+  // useTransition: React 18新增，用于标记状态更新为可中断的低优先级更新
   useTransition: mountTransition,
+  
+  // useSyncExternalStore: 用于订阅外部数据源的实现，保证状态同步性
   useSyncExternalStore: mountSyncExternalStore,
+  
+  // useId: React 18新增，生成唯一ID的实现，用于SSR和客户端一致性
   useId: mountId,
 };
 
@@ -93,7 +125,9 @@ const ContextOnlyDispatcher: Dispatcher = {
 ## 总结
 mount阶段： 函数组件是进行初始化，那么此时调用的就是mountXXX对应的函数
 update阶段： 函数组件是进行更新，那么此时调用的就是updateXXX对应的函数
-其他场景下（报错）：此时调用的就是 throwInvaildError
+其他场景下（报错）：此时调用的就是 throwInvalidHookError
+
+> 注意：React会在开发环境下进行额外的检查，确保Hooks只在函数组件或自定义Hook内部调用。在生产环境中，这些检查会被移除以提高性能。
 
 当FC（Function Component） 进入render流程的时候，首先会判断是初次渲染还是更新：
 
@@ -121,8 +155,10 @@ useEffect(()=>{
 
 type Hook = {
   memoizedState: any, // 保存的状态
-  queue: UpdateQueue<any> | null, // 
-  next: Hook | null, // 下一个hook
+  baseState: any, // 初始状态或上一次渲染的最终状态
+  baseQueue: UpdateQueue<any> | null, // 尚未处理的更新队列
+  queue: UpdateQueue<any> | null, // 更新队列
+  next: Hook | null, // 下一个hook，形成单向链表结构
 };
 
 ```
@@ -133,16 +169,20 @@ type Hook = {
 - 不同类型的hook，hook.memoizedState所存储的内容也是不同的
   
  
-- useState: 对于const [state ,updateState] = useState(initialState), memoizedState存储的是state
+- useState: 对于const [state, updateState] = useState(initialState), memoizedState存储的是state
 - useReducer: 对于const [state, dispatch] = useReducer(reducer, initialArg, init), memoizedState存储的是state
-- useEffect： 对于useEffect(() => {}, deps), memoizedState存储的是callback、deps等数据
-- useRef: 对于useRef(initialValue), memoizedState存储的是{current: initialValue} //
-- useMemo: 对于useMemo(() => {}, deps), memoizedState存储的是[[...deps], callback()]数据
-- useCallback: 对于useCallback(() => {}, deps), memoizedState存储的是{callback, deps}数据
+- useEffect： 对于useEffect(() => {}, deps), memoizedState存储的是包含callback、deps等信息的Effect对象
+- useRef: 对于useRef(initialValue), memoizedState存储的是{current: initialValue}引用对象
+- useMemo: 对于useMemo(() => {}, deps), memoizedState存储的是计算结果，而依赖项和工厂函数存储在内部结构中
+- useCallback: 对于useCallback(() => {}, deps), memoizedState存储的是记忆化的回调函数，依赖项存储在其他字段中
+
+> 依赖数组比较：React对useMemo、useCallback和useEffect的依赖数组进行浅比较（shallow comparison），通过Object.is()方法比较每个依赖项是否发生变化。
  
 
 
-有些hook不需要memoizedState 保存自身数据，比如useContext
+有些hook不需要memoizedState保存自身数据，比如useContext，它主要依赖于Context的订阅机制而不是自身状态存储。
+
+> 注意：在React 18中，Hook对象还可能包含额外的字段，如`lanes`、`flags`等，用于优先级调度和标记系统。
 
 # Hook 的一个执行流程
 当FC进入到render阶段时，会被renderWithHooks函数处理执行
@@ -161,11 +201,14 @@ export function renderWithHooks<Props, SecondArg>(
   currentlyRenderingFiber = workInProgress;
 
   
-// 每一次执行函数组件之前，先清空状态，用于存放hooks列表
+// 重置hook相关的全局变量
+  resetHooks();
+  
+  // 每一次执行函数组件之前，先清空状态，用于存放hooks列表
   workInProgress.memoizedState = null; 
   // 清空状态队列，用于存放effect list
   workInProgress.updateQueue = null; 
-  // lanes 优先级置为最高
+  // lanes 优先级置为NoLanes
   workInProgress.lanes = NoLanes;
  
    
@@ -378,7 +421,21 @@ let number,setNumber;
 showNumber && ( [number, setNumber] = React.useState(0));
 ```
 
-假设第一次父组件传递过来的 showNumber 为true，此时就会渲染第一个hook，第二次渲染的时候，假设父组件传递过来的事false，那么第一个hook就不会执行。此时就会出现链表不一致的情况，在复用的逻辑中，就会出现问题
+假设第一次父组件传递过来的 showNumber 为true，此时就会渲染第一个hook，第二次渲染的时候，假设父组件传递过来的是false，那么第一个hook就不会执行。此时就会出现链表不一致的情况，在复用的逻辑中，就会出现问题。
+
+### 开发环境中的Hook调用顺序检查
+在开发环境中，React会在渲染结束后验证所有Hooks的调用顺序是否与上一次渲染一致。如果不一致，将会抛出以下错误：
+
+```
+Error: Rendered fewer hooks than expected. This may be caused by an accidental early return statement.
+```
+或
+
+```
+Error: Rendered more hooks than during the previous render.
+```
+
+这些检查帮助开发者在开发阶段就发现潜在的问题。
 
 
 
@@ -388,6 +445,7 @@ showNumber && ( [number, setNumber] = React.useState(0));
 
 ## 案例三， update
 
+### updateWorkInProgressHook 实现
 ``` jsx
 /**
  * This function is used both for updates and for re-renders triggered by a render phase update. It assumes there is either a current hook we can clone, or a work-in-progress hook from a previous render pass that we can use as a base.
@@ -474,4 +532,57 @@ function updateWorkInProgressHook(): Hook {
 }
 ```
 
-从上面的update源码可以看得出来，如果hooks 放在了条件语句、循环等异步操作里。就会出现链表不一致的结果。那么react会报错 
+### updateState 实现
+
+```jsx
+function updateState<S>(
+  initialState: (() => S) | S,
+): [S, Dispatch<BasicStateAction<S>>] {
+  return updateReducer(basicStateReducer, (initialState: any));
+}
+
+function updateReducer<S, I, A>(
+  reducer: (S, A) => S,
+  initialArg: I,
+  init?: (I) => S,
+): [S, Dispatch<A>] {
+  const hook = updateWorkInProgressHook();
+  const queue = hook.queue;
+  
+  // 标记这是一个 reducer 更新
+  queue.lastRenderedReducer = reducer;
+
+  // 处理待处理的更新队列
+  const current: Hook = currentHook!;
+  const pendingQueue = queue.pending;
+  
+  if (pendingQueue !== null) {
+    // 处理所有待处理的更新
+    const first = pendingQueue.next;
+    let pending = pendingQueue.next;
+    let newState = current.baseState;
+    
+    do {
+      const action = pending.action;
+      // 应用 reducer 计算新状态
+      newState = reducer(newState, action);
+      pending = pending.next;
+    } while (pending !== first);
+    
+    // 更新状态
+    hook.memoizedState = newState;
+    hook.baseState = newState;
+    queue.lastRenderedState = newState;
+    
+    // 清空待处理队列
+    queue.pending = null;
+  }
+  
+  const dispatch: Dispatch<A> = queue.dispatch;
+  return [hook.memoizedState, dispatch];
+}
+```
+
+从上面的update源码可以看得出来，如果hooks 放在了条件语句、循环等异步操作里。就会出现链表不一致的结果。那么react会报错
+
+> 注意：在React 18中，添加了自动批处理机制，这意味着即使在setTimeout、Promise.then或自定义事件处理函数中调用setState，React也会尝试将多个状态更新批处理成一个渲染，从而提高性能。

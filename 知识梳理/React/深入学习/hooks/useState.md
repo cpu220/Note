@@ -1,27 +1,27 @@
 # useState
 
-> useState和useReducer的区别
+> useState和useReducer的区别与React 18.x特性分析
 
 ## 基本用法
 
 ```jsx
-import { useState } from 'react';
+import { useState, useReducer } from 'react';
 
-const initialState = {count:0}
+const initialState = {count: 0}
 
 /** 
  * @param {object} state 状态
  * @param {object} action 数据变化的描述对象
  */
-function counter(state,action){
-     const _num = action.payload
+function counter(state, action){
+    const _num = action.payload;
     switch(action.type){
         case 'increment':
-            return {count:state.count+_num}
+            return {count: state.count + _num};
         case 'decrement':
-            return {count:state.count-_num}
+            return {count: state.count - _num};
         default:
-            throw new Error();
+            throw new Error(`Unknown action type: ${action.type}`);
     }
 }
 
@@ -29,36 +29,36 @@ function counter(state,action){
 function init(initialState){
     // 有些时候，我们需要基于之前初始化状态做一些操作，返回新的处理后的初始值
     // 重新返回新的初始化状态
-    return {count: initialState.count + 1}
+    return {count: initialState.count + 1};
 }
 
 function App(){
-    const [num,setNum] = useState(0);
-    const [state,dispatch] = useReducer(counter,initialState,init)
+    const [num, setNum] = useState(0);
+    const [state, dispatch] = useReducer(counter, initialState, init);
 
-    const increment = ()=>{
+    const increment = () => {
         dispatch({
-            type:'increment',
-            payload:num
-        })
-    }
+            type: 'increment',
+            payload: num
+        });
+    };
 
-    const decrement = ()=>{
+    const decrement = () => {
         dispatch({
-            type:'decrement',
-            payload:num
-        })
-    }
+            type: 'decrement',
+            payload: num
+        });
+    };
 
     return (
         <div>
-            <p>{num}</p>
-            <div>{count}<div>
-            <button onClick={()=>setNum(num+1)}>+</button>
+            <p>useState: {num}</p>
+            <div>useReducer: {state.count}</div>
+            <button onClick={() => setNum(num + 1)}>+</button>
             <button onClick={increment}>increment</button>
-            <button onClick={increment}>decrement</button>
+            <button onClick={decrement}>decrement</button>
         </div>
-    )
+    );
 }
 
 ```
@@ -79,37 +79,67 @@ const [state,dispatch] = useReducer(
 ### useState 的 mount 阶段
 ``` tsx
 
-function mountStateImpl<S>(initialState: (() => S) | S): Hook {
-    //1. 拿到hook 对象
-  const hook = mountWorkInProgressHook();
-  if (typeof initialState === 'function') {
-    // 2. 如果传入的值是函数，则执行函数获取初始值 （惰性函数）
-    initialState = initialState();
-  }
+function mountState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>] {
+    // 1. 创建一个新的 hook 对象
+    const hook = mountWorkInProgressHook();
+    
+    // 2. 处理惰性初始化
+    if (typeof initialState === 'function') {
+        // 如果传入的值是函数，则执行函数获取初始值（惰性初始化）
+        initialState = initialState();
+    }
  
- // 3. 将初始值保存到hook对象的 memoizedState和baseState上
-  hook.memoizedState = hook.baseState = initialState;
-
-  const queue: UpdateQueue<S, BasicStateAction<S>> = {
-    pending: null,
-    lanes: NoLanes,
-    dispatch: null,
-    lastRenderedReducer: basicStateReducer, // 注意这里，和 mountReducer的区别 
-    lastRenderedState: (initialState: any),
-  };
-  // 3.1设置 hook.queue
-  hook.queue = queue;
-  
-// dispatch 就是用来修改状态的方法
-  const dispatch: Dispatch<BasicStateAction<S>> = (dispatchSetState.bind(
+    // 3. 将初始值保存到 hook 对象的 memoizedState 和 baseState 上
+    hook.memoizedState = initialState;
+    hook.baseState = initialState;
+    hook.baseQueue = null;
+    
+    // 4. 创建更新队列
+    const queue: UpdateQueue<S, BasicStateAction<S>> = {
+        pending: null,
+        lanes: NoLanes,
+        dispatch: null,
+        // useState 使用内置的 basicStateReducer
+        lastRenderedReducer: basicStateReducer,
+        lastRenderedState: initialState,
+    };
+    
+    // 6. 创建 dispatch 函数
+  const dispatch: Dispatch<BasicStateAction<S>> = (queue.dispatch = (dispatchSetState.bind(
     null,
     currentlyRenderingFiber,
     queue,
-  ): any);
-  queue.dispatch = dispatch;
-  // 返回当前状态，dispatch函数
+  ): any));
+  
+  // 7. 返回当前状态和 dispatch 函数
   return [hook.memoizedState, dispatch];
+}
 
+// React 18.x 中 dispatchSetState 的核心逻辑大致如下：
+function dispatchSetState<S>(
+  fiber: Fiber,
+  queue: UpdateQueue<S, BasicStateAction<S>>,
+  action: BasicStateAction<S>,
+) {
+  // 获取当前 lane (React 18 中的优先级模型)
+  const lane = requestUpdateLane(fiber);
+  
+  // 创建更新对象
+  const update = { lane, action, hasEagerState: false, eagerState: null, next: null };
+  
+  // 尝试优化：如果当前状态可以立即计算，尝试提前计算
+  const currentState = queue.lastRenderedState;
+  if (typeof action === 'function') {
+    // 函数式更新需要基于当前状态
+    update.eagerState = action(currentState);
+    update.hasEagerState = true;
+  }
+  
+  // 将更新加入队列
+  enqueueUpdate(fiber, queue, update);
+  
+  // 调度更新 (在 React 18 中会自动批处理)
+  scheduleUpdateOnFiber(fiber, lane);
 }
 
 ```
@@ -218,3 +248,163 @@ function updateReducer<S, I, A>(
 所以，useState可以视为 reducer 参数为 basicStateReducer 的 useReducer 
 
 > 在update阶段，updateState 内部直接调用的就是 updateReducer，传入的reducer仍然是 basicStateReducer
+
+## React 18.x 的新特性
+
+### 1. 自动批处理 (Automatic Batching)
+
+在 React 18 之前，只有在 React 事件处理函数中的状态更新才会被批处理。在 React 18 中，所有的状态更新（包括 Promise、setTimeout、原生事件处理函数等）都会自动进行批处理。
+
+```jsx
+// React 18 之前 - 会触发两次渲染
+fetchData().then(() => {
+  setCount(c => c + 1); // 触发一次渲染
+  setFlag(f => !f); // 触发一次渲染
+});
+
+// React 18 中 - 只会触发一次渲染
+fetchData().then(() => {
+  setCount(c => c + 1);
+  setFlag(f => !f);
+  // 这两个更新会被批处理，只触发一次渲染
+});
+```
+
+### 2. 显式批处理 (flushSync)
+
+如果需要在某些情况下不进行批处理，可以使用 `flushSync`：
+
+```jsx
+import { flushSync } from 'react-dom';
+
+function handleClick() {
+  flushSync(() => {
+    setCounter(c => c + 1);
+  });
+  // 此时状态已经更新并渲染完成
+  flushSync(() => {
+    setFlag(f => !f);
+  });
+}
+```
+
+### 3. 并发模式下的状态更新
+
+在 React 18 的并发模式中，状态更新可能会被中断、暂停、恢复或放弃。useState 的更新行为需要考虑这些新的场景：
+
+#### useTransition
+
+对于非紧急更新，可以使用 `useTransition` 将其标记为可中断的：
+
+```jsx
+import { useState, useTransition } from 'react';
+
+function List({ items }) {
+  const [filter, setFilter] = useState('');
+  const [isPending, startTransition] = useTransition();
+  
+  function handleChange(e) {
+    // 紧急更新：立即更新输入框
+    setFilter(e.target.value);
+    
+    // 非紧急更新：在后台计算并更新列表，可能会被中断
+    startTransition(() => {
+      // 过滤列表的逻辑
+    });
+  }
+}
+```
+
+### 4. 优先级模型的变化
+
+React 18 使用了新的优先级模型 (Lane Model)，来更好地处理并发更新。在 useState 的更新中，每个更新都会被分配一个 lane，表示其优先级。
+
+## 常见错误与最佳实践
+
+### 1. 状态更新的异步性
+
+记住，React 的状态更新是异步的：
+
+```jsx
+// 错误示例
+function handleClick() {
+  setCount(count + 1);
+  console.log(count); // 输出的仍是旧值，不是更新后的值
+}
+
+// 正确示例
+function handleClick() {
+  setCount(c => c + 1); // 使用函数式更新
+  // 或者在 useEffect 中访问更新后的值
+  useEffect(() => {
+    console.log(count);
+  }, [count]);
+}
+```
+
+### 2. 避免在渲染过程中更新状态
+
+不要在组件的渲染阶段直接更新状态，这会导致无限循环：
+
+```jsx
+// 错误示例
+function Component() {
+  const [count, setCount] = useState(0);
+  setCount(count + 1); // 会导致无限循环
+  return <div>{count}</div>;
+}
+
+// 正确示例
+function Component() {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    setCount(count + 1); // 在副作用中更新
+  }, []);
+  return <div>{count}</div>;
+}
+```
+
+### 3. 对象和数组的不可变性
+
+更新对象或数组状态时，总是创建新的副本，而不是修改原对象：
+
+```jsx
+// 错误示例
+function handleClick() {
+  user.name = 'New Name'; // 直接修改对象
+  setUser(user); // 不会触发重新渲染
+}
+
+// 正确示例
+function handleClick() {
+  setUser(prevUser => ({ ...prevUser, name: 'New Name' })); // 创建新对象
+}
+```
+
+## 输入输出示例
+
+#### 输入输出示例
+输入：
+```jsx
+const [count, setCount] = useState(0);
+setCount(prevCount => prevCount + 1);
+setCount(prevCount => prevCount + 1);
+```
+
+输出：
+```jsx
+// 最终 count 的值为 2，因为两次更新都被正确应用了
+// 这是因为函数式更新保证了基于最新状态进行更新
+```
+
+输入：
+```jsx
+const [count, setCount] = useState(0);
+setCount(count + 1);
+setCount(count + 1);
+```
+
+输出：
+```jsx
+// 最终 count 的值为 1，因为两次更新都使用了相同的初始值 0
+// 非函数式更新在批处理中可能会有此问题

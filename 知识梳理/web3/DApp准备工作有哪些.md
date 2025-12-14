@@ -20,7 +20,7 @@ DApp，对前端来说，大体上需要有以下两个部分
 
 > 注意：整个开发过程需要在国外
 
-按照商品的信息，安装&注册顺序如下：
+按照上面的信息，安装&注册顺序如下：
 
 nodejs-> Metamask -> walletConnect Cloud-> Ganache -> Hardhat -> Remix
 

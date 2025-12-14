@@ -23,9 +23,5 @@ function person() {
 }
 
 
-const person1 = myNew(person)
+const person1 = myNew(Person, '李四', 20)
 person1.say()
-
-// const person1 = new person()
-
-// person1.say()
